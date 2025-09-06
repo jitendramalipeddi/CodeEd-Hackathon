@@ -36,6 +36,7 @@ export function renderSavedTopics() {
 
 // --- Dashboard View ---
 export function updateDashboard(topic) {
+    
     const module = state.getModuleForTopic(topic);
     if (!module) {
         console.error("Could not find module for topic:", topic);

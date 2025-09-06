@@ -8,12 +8,14 @@ export function switchView(viewName) {
     dom.loadingView.classList.add('hidden');
     dom.dashboardView.classList.add('hidden');
 
-    if (viewName === 'topic-selection') {
-        dom.topicSelectionView.classList.remove('hidden');
-    } else if (viewName === 'loading') {
-        dom.loadingView.classList.remove('hidden');
-    } else if (viewName === 'dashboard') {
-        dom.dashboardView.classList.remove('hidden');
+    const viewMap = {
+        'topic-selection': dom.topicSelectionView,
+        'loading': dom.loadingView,
+        'dashboard': dom.dashboardView
+    };
+
+    if (viewMap[viewName]) {
+        viewMap[viewName].classList.remove('hidden');
     }
 }
 
@@ -21,7 +23,7 @@ export function switchView(viewName) {
 export function renderSavedTopics() {
     const topics = state.getAllTopics();
     if (topics.length === 0) {
-        dom.savedTopicsList.innerHTML = `<p class="text-slate-400">No modules created yet.</p>`;
+        dom.savedTopicsList.innerHTML = `<p class="text-slate-400">No modules created yet. Start by entering a topic above!</p>`;
         return;
     }
 
@@ -35,7 +37,11 @@ export function renderSavedTopics() {
 // --- Dashboard View ---
 export function updateDashboard(topic) {
     const module = state.getModuleForTopic(topic);
-    if (!module) return;
+    if (!module) {
+        console.error("Could not find module for topic:", topic);
+        switchView('topic-selection');
+        return;
+    }
     
     dom.topicTitle.textContent = module.topic;
     updateReviewCounts();
@@ -114,8 +120,6 @@ export function showReading() {
     dom.modalBody.innerHTML = `<div class="prose max-w-none"><p>${module.summary.replace(/\n/g, '<br>')}</p></div>`;
 }
 
-
-
 export function startFlashcards() {
     const topic = state.getCurrentTopic();
     const module = state.getModuleForTopic(topic);
@@ -145,69 +149,36 @@ export function startFlashcards() {
             return;
         }
         const cardData = reviewItems[currentCardIndex];
-        dom.modalBody.innerHTML = `
-            <div class="mb-4">
-                <div class="flex justify-between items-center mb-1">
-                    <span class="text-sm font-medium text-slate-500">Progress</span>
-                    <span id="flashcard-progress-text" class="text-sm font-semibold text-slate-600"></span>
+        dom.modalBody.innerHTML = `<div class="[perspective:1000px]">
+            <div class="card relative w-full h-64">
+                <div class="card-face absolute w-full h-full p-6 rounded-lg shadow-lg bg-slate-100 flex items-center justify-center text-center">
+                    <p class="text-2xl">${cardData.term}</p>
                 </div>
-                <div class="w-full bg-slate-200 rounded-full h-2.5">
-                    <div id="flashcard-progress-bar-inner" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-                </div>
-            </div>
-
-            <div class="[perspective:1000px]">
-                <div class="card relative w-full h-64">
-                    <div class="card-face absolute w-full h-full p-6 rounded-lg shadow-lg bg-slate-100 flex items-center justify-center text-center">
-                        <p class="text-2xl">${cardData.term}</p>
-                    </div>
-                    <div class="card-face card-face-back absolute w-full h-full p-6 rounded-lg shadow-lg bg-indigo-100 flex items-center justify-center text-center">
-                        <p class="text-lg">${cardData.definition}</p>
-                    </div>
+                <div class="card-face card-face-back absolute w-full h-full p-6 rounded-lg shadow-lg bg-indigo-100 flex items-center justify-center text-center">
+                    <p class="text-lg">${cardData.definition}</p>
                 </div>
             </div>
-            <div class="flex justify-center items-center mt-6 gap-4">
-                <button id="flip-btn" class="text-indigo-600 font-semibold">Flip Card</button>
-            </div>
-            <div id="feedback-buttons" class="hidden flex justify-center items-center mt-4 gap-4">
-                <button data-correct="false" class="bg-red-500 text-white font-semibold px-6 py-2 rounded-lg hover:bg-red-600">Incorrect</button>
-                <button data-correct="true" class="bg-green-500 text-white font-semibold px-6 py-2 rounded-lg hover:bg-green-600">Correct</button>
-            </div>`;
+        </div>
+        <div class="flex justify-center items-center mt-6 gap-4">
+            <button id="flip-btn" class="text-indigo-600 font-semibold">Flip Card</button>
+        </div>
+        <div id="feedback-buttons" class="hidden flex justify-center items-center mt-4 gap-4">
+            <button data-correct="false" class="bg-red-500 text-white font-semibold px-6 py-2 rounded-lg hover:bg-red-600">Incorrect</button>
+            <button data-correct="true" class="bg-green-500 text-white font-semibold px-6 py-2 rounded-lg hover:bg-green-600">Correct</button>
+        </div>`;
         
-        // --- LOGIC TO UPDATE THE PROGRESS BAR ---
-        const totalCards = reviewItems.length;
-        const cardsCompleted = currentCardIndex;
-        const progressPercentage = (cardsCompleted / totalCards) * 100;
-
-        const progressBarInner = document.getElementById('flashcard-progress-bar-inner');
-        const progressText = document.getElementById('flashcard-progress-text');
-
-        progressBarInner.style.width = `${progressPercentage}%`;
-        progressText.textContent = `${cardsCompleted} / ${totalCards}`;
-        // --- END OF PROGRESS BAR LOGIC ---
-
         const card = dom.modalBody.querySelector('.card');
         document.getElementById('flip-btn').addEventListener('click', () => {
             card.classList.add('is-flipped');
             document.getElementById('flip-btn').classList.add('hidden');
             document.getElementById('feedback-buttons').classList.remove('hidden');
         });
-
         document.getElementById('feedback-buttons').querySelectorAll('button').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                // Update progress bar to full on last card's answer
-                if (currentCardIndex === totalCards - 1) {
-                    progressBarInner.style.width = '100%';
-                    progressText.textContent = `${totalCards} / ${totalCards}`;
-                }
                 const isCorrect = e.target.dataset.correct === 'true';
                 state.updateItemProgress(`f_${cardData.index}`, isCorrect);
-                
-                // Use a short delay before showing the next card
-                setTimeout(() => {
-                    currentCardIndex++;
-                    renderFlashcard();
-                }, 300);
+                currentCardIndex++;
+                renderFlashcard();
             });
         });
     }

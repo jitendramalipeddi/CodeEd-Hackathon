@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraLearn - Personalized Microlearning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+        }
+        .card.is-flipped {
+            transform: rotateY(180deg);
+        }
+        .card-face {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .card-face-back {
+            transform: rotateY(180deg);
+        }
+        /* Custom scrollbar for better aesthetics */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 flex items-center justify-center min-h-screen">
+
+    <div class="container mx-auto p-4 max-w-4xl w-full">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-slate-900">AuraLearn</h1>
+            <p class="text-slate-600 mt-1">Your AI-powered corporate learning companion.</p>
+        </header>
+
+        <main id="app-container" class="bg-white rounded-2xl shadow-xl p-6 md:p-8 min-h-[500px] flex flex-col transition-all duration-300">
+
+            <!-- View 1: Topic Selection -->
+            <div id="topic-selection-view">
+                <h2 class="text-2xl font-semibold mb-2">What would you like to learn today?</h2>
+                <p class="text-slate-500 mb-6">Enter a topic, and we'll generate a personalized learning module for you.</p>
+                <form id="topic-form">
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="topic-input" placeholder="e.g., 'Strategic Negotiation' or 'Python for Data Science'" class="flex-grow w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition" required>
+                        <button type="submit" class="bg-indigo-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Generate Module
+                        </button>
+                    </div>
+                </form>
+                 <div id="api-key-error" class="hidden mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                    <strong>Error:</strong> API Key is missing. Please add your Gemini API Key to the `GEMINI_API_KEY` constant in the script section of this file to proceed.
+                </div>
+                 <div class="mt-8">
+                    <h3 class="font-semibold text-lg mb-3">Your Learning Modules:</h3>
+                    <div id="saved-topics-list" class="space-y-2">
+                        <p class="text-slate-400">No modules created yet. Start by entering a topic above!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View 2: Loading -->
+            <div id="loading-view" class="hidden flex flex-col items-center justify-center text-center flex-grow">
+                <div class="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p class="mt-4 text-lg font-medium text-slate-600">Generating your learning module...</p>
+                <p class="text-sm text-slate-500">This may take a moment.</p>
+            </div>
+
+            <!-- View 3: Learning Dashboard -->
+            <div id="dashboard-view" class="hidden">
+                 <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold" id="topic-title"></h2>
+                        <p class="text-slate-500">Choose an activity to begin.</p>
+                    </div>
+                    <button id="back-to-topics-btn" class="text-sm bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-4 py-2 rounded-lg transition">Change Topic</button>
+                </div>
+
+                <!-- Performance Feedback Section -->
+                <div id="performance-feedback" class="mb-6 p-4 rounded-lg bg-slate-50 hidden border border-slate-200">
+                    <h4 class="font-semibold text-slate-800 text-lg">Performance Insight</h4>
+                    <p id="feedback-message" class="text-slate-600 mt-1"></p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Short Reading Card -->
+                    <button id="start-reading-btn" class="bg-sky-50 p-6 rounded-xl text-left hover:bg-sky-100 hover:shadow-lg transition-all duration-300 border-2 border-transparent hover:border-sky-500">
+                        <h3 class="text-xl font-semibold text-sky-800">Short Reading</h3>
+                        <p class="text-sky-700 mt-1">Get a concise overview of the key concepts.</p>
+                    </button>
+                    <!-- Flashcards Card -->
+                    <button id="start-flashcards-btn" class="bg-amber-50 p-6 rounded-xl text-left hover:bg-amber-100 hover:shadow-lg transition-all duration-300 border-2 border-transparent hover:border-amber-500">
+                        <h3 class="text-xl font-semibold text-amber-800">Flashcards</h3>
+                        <p class="text-amber-700 mt-1">Review key terms and definitions. Items due for review: <span id="flashcard-review-count" class="font-bold">0</span></p>
+                    </button>
+                    <!-- Quiz Card -->
+                    <button id="start-quiz-btn" class="bg-emerald-50 p-6 rounded-xl text-left hover:bg-emerald-100 hover:shadow-lg transition-all duration-300 border-2 border-transparent hover:border-emerald-500">
+                        <h3 class="text-xl font-semibold text-emerald-800">Quiz</h3>
+                        <p class="text-emerald-700 mt-1">Test your knowledge and understanding. Questions due for review: <span id="quiz-review-count" class="font-bold">0</span></p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- View 4: Learning Modal -->
+            <div id="learning-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div id="modal-content" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                    <div class="p-6 border-b flex justify-between items-center">
+                        <h2 id="modal-title" class="text-xl font-bold"></h2>
+                        <button id="close-modal-btn" class="text-slate-500 hover:text-slate-800 text-3xl leading-none">&times;</button>
+                    </div>
+                    <div id="modal-body" class="p-6 flex-grow overflow-y-auto custom-scrollbar">
+                        <!-- Content will be injected here -->
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        const GEMINI_API_KEY = "AIzaSyBqi2VvAyzYiaJaA_trqiZbZg9FhBb5BwM"; // IMPORTANT: Add your Gemini API Key here
+
+        // DOM Elements
+        const topicSelectionView = document.getElementById('topic-selection-view');
+        const loadingView = document.getElementById('loading-view');
+        const dashboardView = document.getElementById('dashboard-view');
+        const topicForm = document.getElementById('topic-form');
+        const topicInput = document.getElementById('topic-input');
+        const topicTitle = document.getElementById('topic-title');
+        const savedTopicsList = document.getElementById('saved-topics-list');
+        const backToTopicsBtn = document.getElementById('back-to-topics-btn');
+        const apiKeyError = document.getElementById('api-key-error');
+
+        // Buttons
+        const startReadingBtn = document.getElementById('start-reading-btn');
+        const startFlashcardsBtn = document.getElementById('start-flashcards-btn');
+        const startQuizBtn = document.getElementById('start-quiz-btn');
+
+        // Modal
+        const learningModal = document.getElementById('learning-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        
+        // App State
+        let state = {
+            currentTopic: null,
+            currentModule: null,
+            userProgress: {}, // { topic: { module, items: { id: { level, nextReviewDate } }, performance: { quizHistory: [] } } }
+        };
+
+        const SPACED_REPETITION_INTERVALS = [1, 3, 7, 14, 30, 90]; // in days
+
+        // --- Core Functions ---
+
+        function init() {
+            loadProgress();
+            renderSavedTopics();
+            topicForm.addEventListener('submit', handleTopicSubmit);
+            backToTopicsBtn.addEventListener('click', () => switchView('topic-selection'));
+            closeModalBtn.addEventListener('click', closeModal);
+            startReadingBtn.addEventListener('click', showReading);
+            startFlashcardsBtn.addEventListener('click', startFlashcards);
+            startQuizBtn.addEventListener('click', startQuiz);
+        }
+
+        function switchView(viewName) {
+            topicSelectionView.classList.add('hidden');
+            loadingView.classList.add('hidden');
+            dashboardView.classList.add('hidden');
+
+            if (viewName === 'topic-selection') {
+                topicSelectionView.classList.remove('hidden');
+            } else if (viewName === 'loading') {
+                loadingView.classList.remove('hidden');
+            } else if (viewName === 'dashboard') {
+                dashboardView.classList.remove('hidden');
+            }
+        }
+
+        async function handleTopicSubmit(e) {
+            e.preventDefault();
+            apiKeyError.classList.add('hidden');
+            const topic = topicInput.value.trim();
+            if (!topic) return;
+            
+            state.currentTopic = topic;
+            
+
+            try {
+                if (!GEMINI_API_KEY) {
+                    throw new Error("API Key is missing. Please add your Gemini API Key to the script.");
+                }
+
+                switchView('loading');
+                const systemPrompt = `You are an expert instructional designer for corporate L&D. Your task is to generate a microlearning module on a given topic. The output must be a single, valid JSON object with no other text before or after it.
+                
+                The JSON object must have the following structure:
+                {
+                  "topic": "The user's requested topic",
+                  "summary": "A concise, one-paragraph summary (3-5 sentences) of the topic's key principles, suitable for a corporate audience.",
+                  "flashcards": [
+                    {"term": "Key Term 1", "definition": "A clear and brief definition."},
+                    {"term": "Key Term 2", "definition": "A clear and brief definition."}
+                  ],
+                  "quiz": [
+                    {
+                      "question": "A multiple-choice question to test understanding.",
+                      "options": ["Option A", "Option B", "Option C", "Option D"],
+                      "answer": "The string of the correct option"
+                    }
+                  ]
+                }
+
+                Generate 5-8 flashcards and 4-6 quiz questions. Ensure the content is professional, accurate, and practical for the workplace.`;
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+                
+                const payload = {
+                    contents: [{ parts: [{ text: `Generate a module for the topic: "${topic}"` }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API Error: ${errorData.error.message}`);
+                }
+                
+                const result = await response.json();
+                const textContent = result.candidates[0].content.parts[0].text;
+                const cleanedText = textContent.replace(/```json|```/g, '').trim();
+                
+                state.currentModule = JSON.parse(cleanedText);
+                initializeTopicProgress(topic);
+                loadDashboard(topic);
+            } catch (error) {
+                console.error('Error generating content:', error);
+                if (error.message.includes("API Key is missing")) {
+                    apiKeyError.classList.remove('hidden');
+                } else {
+                    showInfoModal("Error", `Failed to generate module: ${error.message}`);
+                }
+                switchView('topic-selection');
+            }
+        }
+
+        function loadDashboard(topic) {
+            state.currentTopic = topic;
+            const module = state.userProgress[topic].module;
+            if (!module) {
+                 showInfoModal("Error", "Could not find module data for this topic.");
+                switchView('topic-selection');
+                return;
+            }
+            state.currentModule = module;
+            topicTitle.textContent = module.topic;
+            updateReviewCounts();
+            renderPerformanceFeedback();
+            switchView('dashboard');
+        }
+
+        // --- Spaced Repetition and Progress ---
+
+        function initializeTopicProgress(topic) {
+            if (!state.userProgress[topic]) {
+                state.userProgress[topic] = {
+                    module: state.currentModule,
+                    items: {},
+                    performance: { quizHistory: [] }
+                };
+                saveProgress();
+                renderSavedTopics();
+            }
+        }
+
+        function updateReviewCounts() {
+            const topicProgress = state.userProgress[state.currentTopic];
+            if (!topicProgress) return;
+            
+            const now = new Date().toISOString().split('T')[0];
+            let flashcardCount = 0;
+            let quizCount = 0;
+
+            const allItems = [
+                ...state.currentModule.flashcards.map((_, i) => `f_${i}`),
+                ...state.currentModule.quiz.map((_, i) => `q_${i}`)
+            ];
+
+            allItems.forEach(itemId => {
+                const item = topicProgress.items[itemId];
+                if (!item || new Date(item.nextReviewDate) <= new Date(now)) {
+                    if (itemId.startsWith('f_')) flashcardCount++;
+                    if (itemId.startsWith('q_')) quizCount++;
+                }
+            });
+
+            document.getElementById('flashcard-review-count').textContent = flashcardCount;
+            document.getElementById('quiz-review-count').textContent = quizCount;
+        }
+
+        function updateItemProgress(itemId, isCorrect) {
+            const topicProgress = state.userProgress[state.currentTopic];
+            const item = topicProgress.items[itemId] || { level: 0 };
+            
+            if (isCorrect) {
+                item.level = Math.min(item.level + 1, SPACED_REPETITION_INTERVALS.length);
+            } else {
+                item.level = 0;
+            }
+
+            const intervalDays = SPACED_REPETITION_INTERVALS[item.level - 1] || 0;
+            const nextReviewDate = new Date();
+            if(isCorrect) {
+                 nextReviewDate.setDate(nextReviewDate.getDate() + intervalDays);
+            } else {
+                 nextReviewDate.setDate(nextReviewDate.getDate() + 1); // If wrong, review again tomorrow
+            }
+
+            item.nextReviewDate = nextReviewDate.toISOString().split('T')[0];
+            topicProgress.items[itemId] = item;
+            saveProgress();
+        }
+
+        function recordQuizPerformance(score) {
+            const topicProgress = state.userProgress[state.currentTopic];
+            if (!topicProgress.performance) {
+                topicProgress.performance = { quizHistory: [] };
+            }
+            topicProgress.performance.quizHistory.push({
+                score: score,
+                date: new Date().toISOString().split('T')[0]
+            });
+            saveProgress();
+        }
+
+        function saveProgress() {
+            localStorage.setItem('auraLearnProgress', JSON.stringify(state.userProgress));
+        }
+
+        function loadProgress() {
+            const saved = localStorage.getItem('auraLearnProgress');
+            if (saved) {
+                state.userProgress = JSON.parse(saved);
+            }
+        }
+        
+        function renderSavedTopics() {
+            const topics = Object.keys(state.userProgress);
+            if (topics.length === 0) {
+                 savedTopicsList.innerHTML = `<p class="text-slate-400">No modules created yet. Start by entering a topic above!</p>`;
+                 return;
+            }
+
+            savedTopicsList.innerHTML = topics.map(topic => `
+                <button class="w-full text-left bg-slate-100 p-3 rounded-lg hover:bg-indigo-100 transition" data-topic="${topic}">
+                    ${topic}
+                </button>
+            `).join('');
+
+            savedTopicsList.querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const topic = e.currentTarget.dataset.topic;
+                    loadDashboard(topic);
+                });
+            });
+        }
+
+        function renderPerformanceFeedback() {
+            const feedbackContainer = document.getElementById('performance-feedback');
+            const feedbackMessage = document.getElementById('feedback-message');
+            const topicProgress = state.userProgress[state.currentTopic];
+            
+            const history = topicProgress?.performance?.quizHistory;
+
+            if (history && history.length > 0) {
+                const lastQuiz = history[history.length - 1];
+                const lastScorePercent = Math.round(lastQuiz.score * 100);
+                let message = `Your last quiz score was <strong>${lastScorePercent}%</strong>. `;
+
+                if (lastScorePercent <= 70) {
+                    message += "We recommend reviewing the <strong>Short Reading</strong> and <strong>Flashcards</strong> to reinforce the concepts.";
+                } else {
+                    message += "Excellent work! You're showing strong understanding of this topic.";
+                }
+                
+                feedbackMessage.innerHTML = message;
+                feedbackContainer.classList.remove('hidden');
+            } else {
+                feedbackContainer.classList.add('hidden');
+            }
+        }
+
+        // --- Modal and Content Rendering ---
+
+        function openModal(title) {
+            modalTitle.textContent = title;
+            learningModal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            learningModal.classList.add('hidden');
+            modalBody.innerHTML = '';
+            updateReviewCounts();
+            renderPerformanceFeedback();
+        }
+
+        function showInfoModal(title, message) {
+            openModal(title);
+            modalBody.innerHTML = `
+                <div class="text-center p-4">
+                    <p class="text-slate-600">${message}</p>
+                    <button id="close-info-btn" class="mt-6 bg-indigo-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-indigo-700 transition">Close</button>
+                </div>
+            `;
+            document.getElementById('close-info-btn').addEventListener('click', closeModal);
+        }
+
+        function showReading() {
+            openModal("Short Reading");
+            modalBody.innerHTML = `
+                <div class="prose max-w-none">
+                    <p>${state.currentModule.summary.replace(/\n/g, '<br>')}</p>
+                </div>
+            `;
+        }
+        
+        function startFlashcards() {
+            const now = new Date().toISOString().split('T')[0];
+            const reviewItems = state.currentModule.flashcards
+                .map((card, index) => ({ ...card, index }))
+                .filter(card => {
+                    const itemProgress = state.userProgress[state.currentTopic].items[`f_${card.index}`];
+                    return !itemProgress || new Date(itemProgress.nextReviewDate) <= new Date(now);
+                });
+
+            if (reviewItems.length === 0) {
+                showInfoModal("Flashcards", "No flashcards are due for review. Great job!");
+                return;
+            }
+            openModal("Flashcards");
+            let currentCardIndex = 0;
+
+            function renderFlashcard() {
+                if (currentCardIndex >= reviewItems.length) {
+                    modalBody.innerHTML = `
+                        <div class="text-center p-8">
+                            <h3 class="text-2xl font-bold text-emerald-600">All Done!</h3>
+                            <p class="mt-2 text-slate-600">You've reviewed all due flashcards.</p>
+                            <button id="close-review-btn" class="mt-6 bg-indigo-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-indigo-700 transition">Close</button>
+                        </div>
+                    `;
+                    document.getElementById('close-review-btn').addEventListener('click', closeModal);
+                    return;
+                }
+                const cardData = reviewItems[currentCardIndex];
+                modalBody.innerHTML = `
+                    <div class="[perspective:1000px]">
+                        <div class="card relative w-full h-64">
+                            <div class="card-face absolute w-full h-full p-6 rounded-lg shadow-lg bg-slate-100 flex items-center justify-center text-center">
+                                <p class="text-2xl">${cardData.term}</p>
+                            </div>
+                            <div class="card-face card-face-back absolute w-full h-full p-6 rounded-lg shadow-lg bg-indigo-100 flex items-center justify-center text-center">
+                                <p class="text-lg">${cardData.definition}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-center items-center mt-6 gap-4">
+                        <button id="flip-btn" class="text-indigo-600 font-semibold">Flip Card</button>
+                    </div>
+                     <div id="feedback-buttons" class="hidden flex justify-center items-center mt-4 gap-4">
+                         <button data-correct="false" class="bg-red-500 text-white font-semibold px-6 py-2 rounded-lg hover:bg-red-600 transition">Incorrect</button>
+                         <button data-correct="true" class="bg-green-500 text-white font-semibold px-6 py-2 rounded-lg hover:bg-green-600 transition">Correct</button>
+                    </div>
+                `;
+                
+                const card = modalBody.querySelector('.card');
+                const flipBtn = document.getElementById('flip-btn');
+                const feedbackButtonsContainer = document.getElementById('feedback-buttons');
+
+                flipBtn.addEventListener('click', () => {
+                    card.classList.add('is-flipped');
+                    flipBtn.classList.add('hidden');
+                    feedbackButtonsContainer.classList.remove('hidden');
+                });
+
+                feedbackButtonsContainer.querySelectorAll('button').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const isCorrect = e.target.dataset.correct === 'true';
+                        updateItemProgress(`f_${cardData.index}`, isCorrect);
+                        currentCardIndex++;
+                        renderFlashcard();
+                    });
+                });
+            }
+            renderFlashcard();
+        }
+
+        function startQuiz() {
+             const now = new Date().toISOString().split('T')[0];
+             const reviewItems = state.currentModule.quiz
+                .map((q, index) => ({ ...q, index }))
+                .filter(q => {
+                    const itemProgress = state.userProgress[state.currentTopic].items[`q_${q.index}`];
+                    return !itemProgress || new Date(itemProgress.nextReviewDate) <= new Date(now);
+                });
+
+            if (reviewItems.length === 0) {
+                showInfoModal("Quiz", "No quiz questions are due for review. Well done!");
+                return;
+            }
+            openModal("Quiz");
+            let currentQuestionIndex = 0;
+            let score = 0;
+
+            function renderQuestion() {
+                 if (currentQuestionIndex >= reviewItems.length) {
+                    const finalScore = score / reviewItems.length;
+                    recordQuizPerformance(finalScore);
+
+                    modalBody.innerHTML = `
+                        <div class="text-center p-8">
+                            <h3 class="text-2xl font-bold">Quiz Complete!</h3>
+                            <p class="mt-2 text-slate-600 text-lg">You scored ${score} out of ${reviewItems.length}.</p>
+                            <button id="close-quiz-btn" class="mt-6 bg-indigo-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-indigo-700 transition">Close</button>
+                        </div>
+                    `;
+                    document.getElementById('close-quiz-btn').addEventListener('click', closeModal);
+                    return;
+                }
+                
+                const questionData = reviewItems[currentQuestionIndex];
+                modalBody.innerHTML = `
+                    <div>
+                        <p class="text-lg font-semibold mb-4">${currentQuestionIndex + 1}. ${questionData.question}</p>
+                        <div id="options-container" class="space-y-3">
+                            ${questionData.options.map(option => `
+                                <button class="w-full text-left p-4 bg-slate-100 rounded-lg hover:bg-indigo-100 transition border-2 border-transparent">
+                                    ${option}
+                                </button>
+                            `).join('')}
+                        </div>
+                        <p id="quiz-feedback" class="mt-4 font-semibold hidden"></p>
+                        <button id="next-question-btn" class="hidden mt-4 bg-indigo-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-indigo-700 transition">Next</button>
+                    </div>
+                `;
+
+                const optionsContainer = document.getElementById('options-container');
+                const feedbackEl = document.getElementById('quiz-feedback');
+                const nextBtn = document.getElementById('next-question-btn');
+                
+                optionsContainer.querySelectorAll('button').forEach(button => {
+                    button.addEventListener('click', () => {
+                        optionsContainer.querySelectorAll('button').forEach(btn => btn.disabled = true);
+                        const selectedAnswer = button.textContent.trim();
+                        const isCorrect = selectedAnswer === questionData.answer;
+
+                        if (isCorrect) {
+                            score++;
+                            button.classList.remove('bg-slate-100', 'hover:bg-indigo-100');
+                            button.classList.add('bg-green-200', 'border-green-500');
+                            feedbackEl.textContent = "Correct!";
+                            feedbackEl.className = 'mt-4 font-semibold text-green-600';
+                        } else {
+                            button.classList.remove('bg-slate-100', 'hover:bg-indigo-100');
+                            button.classList.add('bg-red-200', 'border-red-500');
+                             feedbackEl.textContent = `Incorrect. The correct answer is: ${questionData.answer}`;
+                            feedbackEl.className = 'mt-4 font-semibold text-red-600';
+                            optionsContainer.querySelectorAll('button').forEach(btn => {
+                                if(btn.textContent.trim() === questionData.answer) {
+                                     btn.classList.add('bg-green-200', 'border-green-500');
+                                }
+                            });
+                        }
+                        
+                        updateItemProgress(`q_${questionData.index}`, isCorrect);
+                        feedbackEl.classList.remove('hidden');
+                        nextBtn.classList.remove('hidden');
+                    });
+                });
+
+                nextBtn.addEventListener('click', () => {
+                    currentQuestionIndex++;
+                    renderQuestion();
+                });
+            }
+            renderQuestion();
+        }
+        
+        // --- Initialize App ---
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+
